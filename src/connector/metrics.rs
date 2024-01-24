@@ -41,7 +41,7 @@ where
 
             trace_query(&query_fmt, params, result, start);
         } else {
-            trace_query(&query, params, result, start);
+            trace_query(query, params, result, start);
         };
     }
 

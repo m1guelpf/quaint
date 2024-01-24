@@ -43,38 +43,43 @@ impl<'a> Expression<'a> {
         }
     }
 
-    #[cfg(feature = "json")]
     pub(crate) fn is_json_expr(&self) -> bool {
         match &self.kind {
-            #[cfg(feature = "json")]
-            ExpressionKind::Parameterized(Value::Json(_)) => true,
-            #[cfg(feature = "json")]
+            ExpressionKind::Parameterized(Value {
+                typed: ValueType::Json(_),
+                ..
+            }) => true,
+
             ExpressionKind::Value(expr) => expr.is_json_value(),
-            #[cfg(feature = "json")]
+
             ExpressionKind::Function(fun) => fun.returns_json(),
             _ => false,
         }
     }
 
     #[allow(dead_code)]
-    #[cfg(feature = "json")]
+
     pub(crate) fn is_json_value(&self) -> bool {
         match &self.kind {
-            #[cfg(feature = "json")]
-            ExpressionKind::Parameterized(Value::Json(_)) => true,
-            #[cfg(feature = "json")]
+            ExpressionKind::Parameterized(Value {
+                typed: ValueType::Json(_),
+                ..
+            }) => true,
+
             ExpressionKind::Value(expr) => expr.is_json_value(),
             _ => false,
         }
     }
 
     #[allow(dead_code)]
-    #[cfg(feature = "json")]
+
     pub(crate) fn into_json_value(self) -> Option<serde_json::Value> {
         match self.kind {
-            #[cfg(feature = "json")]
-            ExpressionKind::Parameterized(Value::Json(json_val)) => json_val,
-            #[cfg(feature = "json")]
+            ExpressionKind::Parameterized(Value {
+                typed: ValueType::Json(json_val),
+                ..
+            }) => json_val,
+
             ExpressionKind::Value(expr) => expr.into_json_value(),
             _ => None,
         }
@@ -221,7 +226,10 @@ pub enum ExpressionKind<'a> {
 impl<'a> ExpressionKind<'a> {
     pub(crate) fn is_xml_value(&self) -> bool {
         match self {
-            Self::Parameterized(Value::Xml(_)) => true,
+            Self::Parameterized(Value {
+                typed: ValueType::Xml(_),
+                ..
+            }) => true,
             Self::Value(expr) => expr.is_xml_value(),
             _ => false,
         }

@@ -25,7 +25,7 @@ use tokio_postgres::{
     config::{ChannelBinding, SslMode},
     Client, Config, Statement,
 };
-use url::Url;
+use url::{Host, Url};
 
 pub(crate) const DEFAULT_SCHEMA: &str = "public";
 
@@ -55,7 +55,6 @@ impl Debug for PostgresClient {
 
 /// A connector interface for the PostgreSQL database.
 #[derive(Debug)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
 pub struct PostgreSql {
     client: PostgresClient,
     pg_bouncer: bool,
@@ -65,14 +64,12 @@ pub struct PostgreSql {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
 pub enum SslAcceptMode {
     Strict,
     AcceptInvalidCerts,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
 pub struct SslParams {
     certificate_file: Option<String>,
     identity_file: Option<String>,
@@ -180,7 +177,6 @@ impl PostgresFlavour {
 /// Wraps a connection url and exposes the parsing logic used by Quaint,
 /// including default values.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
 pub struct PostgresUrl {
     url: Url,
     query_params: PostgresUrlQueryParams,
@@ -223,11 +219,19 @@ impl PostgresUrl {
     ///
     /// If none of them are set, defaults to `localhost`.
     pub fn host(&self) -> &str {
-        match (self.query_params.host.as_ref(), self.url.host_str()) {
-            (Some(host), _) => host.as_str(),
-            (None, Some("")) => "localhost",
-            (None, None) => "localhost",
-            (None, Some(host)) => host,
+        match (self.query_params.host.as_ref(), self.url.host_str(), self.url.host()) {
+            (Some(host), _, _) => host.as_str(),
+            (None, Some(""), _) => "localhost",
+            (None, None, _) => "localhost",
+            (None, Some(host), Some(Host::Ipv6(_))) => {
+                // The `url` crate may return an IPv6 address in brackets, which must be stripped.
+                if host.starts_with('[') && host.ends_with(']') {
+                    &host[1..host.len() - 1]
+                } else {
+                    host
+                }
+            }
+            (None, Some(host), _) => host,
         }
     }
 
@@ -1143,6 +1147,12 @@ mod tests {
     }
 
     #[test]
+    fn should_parse_ipv6_host() {
+        let url = PostgresUrl::new(Url::parse("postgresql://[2001:db8:1234::ffff]:5432/dbname").unwrap()).unwrap();
+        assert_eq!("2001:db8:1234::ffff", url.host());
+    }
+
+    #[test]
     fn should_handle_options_field() {
         let url = PostgresUrl::new(Url::parse("postgresql:///localhost:5432?options=--cluster%3Dmy_cluster").unwrap())
             .unwrap();
@@ -1164,7 +1174,7 @@ mod tests {
             let result_set = client.query_raw("SHOW search_path", &[]).await.unwrap();
             let row = result_set.first().unwrap();
 
-            row[0].to_string()
+            row[0].typed.to_string()
         }
 
         // Safe
@@ -1216,7 +1226,7 @@ mod tests {
             let result_set = client.query_raw("SHOW search_path", &[]).await.unwrap();
             let row = result_set.first().unwrap();
 
-            row[0].to_string()
+            row[0].typed.to_string()
         }
 
         // Safe
@@ -1267,7 +1277,7 @@ mod tests {
             let result_set = client.query_raw("SHOW search_path", &[]).await.unwrap();
             let row = result_set.first().unwrap();
 
-            row[0].to_string()
+            row[0].typed.to_string()
         }
 
         // Safe
@@ -1318,7 +1328,7 @@ mod tests {
             let result_set = client.query_raw("SHOW search_path", &[]).await.unwrap();
             let row = result_set.first().unwrap();
 
-            row[0].to_string()
+            row[0].typed.to_string()
         }
 
         // Safe
@@ -1369,7 +1379,7 @@ mod tests {
             let result_set = client.query_raw("SHOW search_path", &[]).await.unwrap();
             let row = result_set.first().unwrap();
 
-            row[0].to_string()
+            row[0].typed.to_string()
         }
 
         // Safe
@@ -1466,9 +1476,7 @@ mod tests {
         let url = Url::parse(&CONN_STR).unwrap();
         let conn = Quaint::new(url.as_str()).await.unwrap();
 
-        let res = conn
-            .query_raw("SELECT $1", &[Value::integer(1), Value::integer(2)])
-            .await;
+        let res = conn.query_raw("SELECT $1", &[Value::int32(1), Value::int32(2)]).await;
 
         assert!(res.is_err());
 
@@ -1487,41 +1495,38 @@ mod tests {
     #[test]
     fn test_safe_ident() {
         // Safe
-        assert_eq!(is_safe_identifier("hello"), true);
-        assert_eq!(is_safe_identifier("_hello"), true);
-        assert_eq!(is_safe_identifier("àbracadabra"), true);
-        assert_eq!(is_safe_identifier("h3ll0"), true);
-        assert_eq!(is_safe_identifier("héllo"), true);
-        assert_eq!(is_safe_identifier("héll0$"), true);
-        assert_eq!(is_safe_identifier("héll_0$"), true);
-        assert_eq!(
-            is_safe_identifier("disconnect_security_must_honor_connect_scope_one2m"),
-            true
-        );
+        assert!(is_safe_identifier("hello"));
+        assert!(is_safe_identifier("_hello"));
+        assert!(is_safe_identifier("àbracadabra"));
+        assert!(is_safe_identifier("h3ll0"));
+        assert!(is_safe_identifier("héllo"));
+        assert!(is_safe_identifier("héll0$"));
+        assert!(is_safe_identifier("héll_0$"));
+        assert!(is_safe_identifier("disconnect_security_must_honor_connect_scope_one2m"));
 
         // Not safe
-        assert_eq!(is_safe_identifier(""), false);
-        assert_eq!(is_safe_identifier("Hello"), false);
-        assert_eq!(is_safe_identifier("hEllo"), false);
-        assert_eq!(is_safe_identifier("$hello"), false);
-        assert_eq!(is_safe_identifier("hello!"), false);
-        assert_eq!(is_safe_identifier("hello#"), false);
-        assert_eq!(is_safe_identifier("he llo"), false);
-        assert_eq!(is_safe_identifier(" hello"), false);
-        assert_eq!(is_safe_identifier("he-llo"), false);
-        assert_eq!(is_safe_identifier("hÉllo"), false);
-        assert_eq!(is_safe_identifier("1337"), false);
-        assert_eq!(is_safe_identifier("_HELLO"), false);
-        assert_eq!(is_safe_identifier("HELLO"), false);
-        assert_eq!(is_safe_identifier("HELLO$"), false);
-        assert_eq!(is_safe_identifier("ÀBRACADABRA"), false);
+        assert!(!is_safe_identifier(""));
+        assert!(!is_safe_identifier("Hello"));
+        assert!(!is_safe_identifier("hEllo"));
+        assert!(!is_safe_identifier("$hello"));
+        assert!(!is_safe_identifier("hello!"));
+        assert!(!is_safe_identifier("hello#"));
+        assert!(!is_safe_identifier("he llo"));
+        assert!(!is_safe_identifier(" hello"));
+        assert!(!is_safe_identifier("he-llo"));
+        assert!(!is_safe_identifier("hÉllo"));
+        assert!(!is_safe_identifier("1337"));
+        assert!(!is_safe_identifier("_HELLO"));
+        assert!(!is_safe_identifier("HELLO"));
+        assert!(!is_safe_identifier("HELLO$"));
+        assert!(!is_safe_identifier("ÀBRACADABRA"));
 
         for ident in RESERVED_KEYWORDS {
-            assert_eq!(is_safe_identifier(ident), false);
+            assert!(!is_safe_identifier(ident));
         }
 
         for ident in RESERVED_TYPE_FUNCTION_NAMES {
-            assert_eq!(is_safe_identifier(ident), false);
+            assert!(!is_safe_identifier(ident));
         }
     }
 

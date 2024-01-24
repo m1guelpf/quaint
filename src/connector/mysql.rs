@@ -22,7 +22,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::Mutex;
-use url::Url;
+use url::{Host, Url};
 
 /// The underlying MySQL driver. Only available with the `expose-drivers`
 /// Cargo feature.
@@ -33,7 +33,6 @@ use super::IsolationLevel;
 
 /// A connector interface for the MySQL database.
 #[derive(Debug)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "mysql")))]
 pub struct Mysql {
     pub(crate) conn: Mutex<my::Conn>,
     pub(crate) url: MysqlUrl,
@@ -44,7 +43,6 @@ pub struct Mysql {
 
 /// Wraps a connection url and exposes the parsing logic used by quaint, including default values.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "mysql")))]
 pub struct MysqlUrl {
     url: Url,
     query_params: MysqlUrlQueryParams,
@@ -98,7 +96,18 @@ impl MysqlUrl {
 
     /// The database host. If `socket` and `host` are not set, defaults to `localhost`.
     pub fn host(&self) -> &str {
-        self.url.host_str().unwrap_or("localhost")
+        match (self.url.host(), self.url.host_str()) {
+            (Some(Host::Ipv6(_)), Some(host)) => {
+                // The `url` crate may return an IPv6 address in brackets, which must be stripped.
+                if host.starts_with('[') && host.ends_with(']') {
+                    &host[1..host.len() - 1]
+                } else {
+                    host
+                }
+            }
+            (_, Some(host)) => host,
+            _ => "localhost",
+        }
     }
 
     /// If set, connected to the database through a Unix socket.
@@ -549,7 +558,7 @@ impl Queryable for Mysql {
 
         let version_string = rows
             .get(0)
-            .and_then(|row| row.get("version").and_then(|version| version.to_string()));
+            .and_then(|row| row.get("version").and_then(|version| version.typed.to_string()));
 
         Ok(version_string)
     }
@@ -592,16 +601,22 @@ mod tests {
     fn should_parse_prefer_socket() {
         let url =
             MysqlUrl::new(Url::parse("mysql://root:root@localhost:3307/testdb?prefer_socket=false").unwrap()).unwrap();
-        assert_eq!(false, url.prefer_socket().unwrap());
+        assert!(!url.prefer_socket().unwrap());
     }
 
     #[test]
     fn should_parse_sslaccept() {
         let url =
             MysqlUrl::new(Url::parse("mysql://root:root@localhost:3307/testdb?sslaccept=strict").unwrap()).unwrap();
-        assert_eq!(true, url.query_params.use_ssl);
-        assert_eq!(false, url.query_params.ssl_opts.skip_domain_validation());
-        assert_eq!(false, url.query_params.ssl_opts.accept_invalid_certs());
+        assert!(url.query_params.use_ssl);
+        assert!(!url.query_params.ssl_opts.skip_domain_validation());
+        assert!(!url.query_params.ssl_opts.accept_invalid_certs());
+    }
+
+    #[test]
+    fn should_parse_ipv6_host() {
+        let url = MysqlUrl::new(Url::parse("mysql://[2001:db8:1234::ffff]:5432/testdb").unwrap()).unwrap();
+        assert_eq!("2001:db8:1234::ffff", url.host());
     }
 
     #[test]

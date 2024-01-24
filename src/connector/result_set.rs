@@ -7,7 +7,6 @@ pub use result_row::*;
 use crate::{ast::Value, error::*};
 use std::sync::Arc;
 
-#[cfg(feature = "json")]
 use serde_json::Map;
 
 /// Encapsulates a set of results and their respective column names.
@@ -109,8 +108,6 @@ impl Iterator for ResultSetIterator {
     }
 }
 
-#[cfg(feature = "json")]
-#[cfg_attr(feature = "docs", doc(cfg(feature = "json")))]
 impl From<ResultSet> for serde_json::Value {
     fn from(result_set: ResultSet) -> Self {
         let columns: Vec<String> = result_set.columns().iter().map(ToString::to_string).collect();

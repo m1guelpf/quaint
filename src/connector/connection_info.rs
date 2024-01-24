@@ -18,19 +18,15 @@ use std::convert::TryFrom;
 pub enum ConnectionInfo {
     /// A PostgreSQL connection URL.
     #[cfg(feature = "postgresql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
     Postgres(PostgresUrl),
     /// A MySQL connection URL.
     #[cfg(feature = "mysql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "mysql")))]
     Mysql(MysqlUrl),
     /// A SQL Server connection URL.
     #[cfg(feature = "mssql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "mssql")))]
     Mssql(MssqlUrl),
     /// A SQLite connection URL.
     #[cfg(feature = "sqlite")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "sqlite")))]
     Sqlite {
         /// The filesystem path of the SQLite database.
         file_path: String,
@@ -38,7 +34,6 @@ pub enum ConnectionInfo {
         db_name: String,
     },
     #[cfg(feature = "sqlite")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "sqlite")))]
     InMemorySqlite { db_name: String },
 }
 
@@ -109,6 +104,8 @@ impl ConnectionInfo {
             ConnectionInfo::Mssql(url) => Some(url.dbname()),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::Sqlite { .. } | ConnectionInfo::InMemorySqlite { .. } => None,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -129,6 +126,8 @@ impl ConnectionInfo {
             ConnectionInfo::Sqlite { db_name, .. } => db_name,
             #[cfg(feature = "sqlite")]
             ConnectionInfo::InMemorySqlite { db_name } => db_name,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -143,6 +142,8 @@ impl ConnectionInfo {
             ConnectionInfo::Mssql(url) => url.host(),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::Sqlite { .. } | ConnectionInfo::InMemorySqlite { .. } => "localhost",
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -157,6 +158,8 @@ impl ConnectionInfo {
             ConnectionInfo::Mssql(url) => url.username().map(Cow::from),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::Sqlite { .. } | ConnectionInfo::InMemorySqlite { .. } => None,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -173,6 +176,8 @@ impl ConnectionInfo {
             ConnectionInfo::Sqlite { file_path, .. } => Some(file_path),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::InMemorySqlite { .. } => None,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -187,6 +192,8 @@ impl ConnectionInfo {
             ConnectionInfo::Mssql(_) => SqlFamily::Mssql,
             #[cfg(feature = "sqlite")]
             ConnectionInfo::Sqlite { .. } | ConnectionInfo::InMemorySqlite { .. } => SqlFamily::Sqlite,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -201,6 +208,8 @@ impl ConnectionInfo {
             ConnectionInfo::Mssql(url) => Some(url.port()),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::Sqlite { .. } | ConnectionInfo::InMemorySqlite { .. } => None,
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 
@@ -228,6 +237,8 @@ impl ConnectionInfo {
             ConnectionInfo::Sqlite { file_path, .. } => file_path.clone(),
             #[cfg(feature = "sqlite")]
             ConnectionInfo::InMemorySqlite { .. } => "in-memory".into(),
+            #[cfg(not(any(feature = "sqlite", feature = "postgresql", feature = "mysql", feature = "mssql")))]
+            _ => panic!("one of 'sqlite', 'postgresql', 'mysql' or 'mssql' features must be enabled"),
         }
     }
 }
@@ -236,16 +247,12 @@ impl ConnectionInfo {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SqlFamily {
     #[cfg(feature = "postgresql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "postgresql")))]
     Postgres,
     #[cfg(feature = "mysql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "mysql")))]
     Mysql,
     #[cfg(feature = "sqlite")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "sqlite")))]
     Sqlite,
     #[cfg(feature = "mssql")]
-    #[cfg_attr(feature = "docs", doc(cfg(feature = "mssql")))]
     Mssql,
 }
 
